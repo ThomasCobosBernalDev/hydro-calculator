@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hydro Milling Jet Calculator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: instrument panel. Inputs on the left, readouts on the right, pressure sweep table below. */
+:root{
+ --bg:#f3f6f8; --panel:#ffffff; --ink:#0b2545; --muted:#53657a; --line:#d5dee6;
+ --water:#0077a8; --water-soft:#dff1f8; --warn:#b4530a; --warn-soft:#fdeedd; --bad:#b3261e;
+ --display:'Barlow Condensed','Arial Narrow',sans-serif; --body:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+ --bg:#0a1626; --panel:#102238; --ink:#e6eef6; --muted:#93a8bd; --line:#223a55;
+ --water:#4cc3ee; --water-soft:#12344b; --warn:#f2a25c; --warn-soft:#3a2614; --bad:#ff8a80; color-scheme:dark}}
+:root[data-theme="dark"]{
+ --bg:#0a1626; --panel:#102238; --ink:#e6eef6; --muted:#93a8bd; --line:#223a55;
+ --water:#4cc3ee; --water-soft:#12344b; --warn:#f2a25c; --warn-soft:#3a2614; --bad:#ff8a80; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;
+ padding-block:28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--display);font-size:clamp(34px,6vw,52px);line-height:1;margin:0;letter-spacing:.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:6px 0 0;max-width:62ch}
+.grid{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:20px}
+@media(max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
+h2{font-family:var(--display);font-size:22px;margin:0 0 14px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+label{font-size:14px;font-weight:500}
+.inp{display:flex;align-items:center;gap:8px}
+input{width:100%;font:500 17px var(--mono);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;min-width:0}
+input:focus-visible,button:focus-visible{outline:2px solid var(--water);outline-offset:2px}
+input[aria-invalid="true"]{border-color:var(--bad)}
+.unit{font:14px var(--mono);color:var(--muted);min-width:34px}
+.hint{font-size:12.5px;color:var(--muted)}
+.err{font-size:13px;color:var(--bad);min-height:1.2em}
+button{font:500 14px var(--body);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;padding:8px 12px;cursor:pointer}
+button:hover{border-color:var(--water)}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tile{background:var(--water-soft);border-radius:8px;padding:14px 16px;min-width:0}
+.tile.force{background:var(--warn-soft)}
+.tile .k{font-size:13px;color:var(--muted)}
+.tile .v{font:600 clamp(34px,6vw,46px)/1.05 var(--display);font-variant-numeric:tabular-nums;color:var(--water)}
+.tile.force .v{color:var(--warn)}
+.tile .u{font:14px var(--mono);color:var(--muted)}
+.tile .alt{font:13px var(--mono);color:var(--muted);margin-top:2px}
+.note{margin-top:14px;background:var(--warn-soft);border-radius:8px;padding:12px 14px;font-size:14.5px}
+.note b{color:var(--warn)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font:14.5px var(--mono);font-variant-numeric:tabular-nums}
+th,td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font:500 13px var(--body);color:var(--muted)}
+tr.cur td{background:var(--water-soft);font-weight:500}
+.formulas{font:14px var(--mono);color:var(--muted);line-height:1.8}
+footer{font-size:13px;color:var(--muted)}
+@media(prefers-reduced-motion:no-preference){.tile .v{transition:color .2s}}
+</style>
+</head><body>
+<main>
+ <header>
+  <h1>Hydro Milling Jet Calculator</h1>
+  <p class="sub">Type in a pressure and a nozzle size. See the jet speed, flow, force, and power. A learning model by Thomas Cobos Bernal.</p>
+ </header>
+ <div class="grid">
+  <section class="panel" aria-labelledby="in-h">
+   <h2 id="in-h">Inputs</h2>
+   <div class="field"><label for="p">Pressure</label><div class="inp"><input id="p" inputmode="decimal" value="20000"><span class="unit">psi</span></div><span class="hint">Example range 5,000 to 40,000</span><span class="err" id="e-p"></span></div>
+   <div class="field"><label for="d">Nozzle diameter</label><div class="inp"><input id="d" inputmode="decimal" value="0.04"><span class="unit">in</span></div><span class="err" id="e-d"></span></div>
+   <div class="field"><label for="n">Number of nozzles</label><div class="inp"><input id="n" inputmode="numeric" value="1"><span class="unit"></span></div><span class="err" id="e-n"></span></div>
+   <div class="field"><label for="c">Discharge coefficient Cd</label><div class="inp"><input id="c" inputmode="decimal" value="0.9"><span class="unit"></span></div><span class="hint">0.9 is an assumed estimate for a good nozzle</span><span class="err" id="e-c"></span></div>
+   <button id="reset" type="button">Reset to defaults</button>
+  </section>
+  <section class="panel" aria-labelledby="out-h">
+   <h2 id="out-h">Results</h2>
+   <div class="tiles" aria-live="polite">
+    <div class="tile"><div class="k">Jet speed</div><div class="v" id="r-v">473</div><div class="u">m/s</div><div class="alt" id="r-vf"></div></div>
+    <div class="tile"><div class="k">Flow rate</div><div class="v" id="r-q">6.08</div><div class="u">gpm</div></div>
+    <div class="tile force"><div class="k">Jet force</div><div class="v" id="r-f">40.7</div><div class="u">lbf</div><div class="alt" id="r-fn"></div></div>
+    <div class="tile"><div class="k">Hydraulic power</div><div class="v" id="r-h">70.9</div><div class="u">hp</div></div>
+   </div>
+   <p class="note"><b>Safety.</b> The jet force also pushes back on whoever holds the nozzle. Real jetting needs trained operators, PPE, and the WJTA-IMCA best practices. This tool is a simple learning model only.</p>
+  </section>
+ </div>
+ <section class="panel" aria-labelledby="t-h">
+  <h2 id="t-h">Same nozzle at other pressures</h2>
+  <div class="scroll"><table><thead><tr><th>psi</th><th>ft/s</th><th>gpm</th><th>lbf</th><th>hp</th></tr></thead><tbody id="rows"></tbody></table></div>
+ </section>
+ <section class="panel" aria-labelledby="f-h">
+  <h2 id="f-h">The physics</h2>
+  <div class="formulas">v = Cd · √(2P / ρ)&nbsp;&nbsp;(Bernoulli)<br>Q = A · v<br>F = ρ · Q · v = 2 · Cd² · P · A<br>HHP = P(psi) · Q(gpm) / 1714</div>
+  <p class="hint" style="margin-top:10px">Water density 998 kg/m³. Ideal model: water is treated as incompressible, and standoff distance and the material being cut are ignored, so real jets differ.</p>
+ </section>
+ <footer>Sources: NASA Glenn Research Center (2021), Bernoulli's equation; Ahmari &amp; Kabir (n.d.), Impact of a jet; Shawver &amp; Forrest (2023), U.S. Patent 11,808,535; WJTA-IMCA best practices via Trenchless Technology (2016).</footer>
+</main>
+<script>
+(function(){
+ var RHO=998,PSI=6894.757,IN=0.0254,N2LBF=0.224809,MS2FTS=3.28084,M3S2GPM=15850.32;
+ function jet(p,d,n,cd){var P=p*PSI,D=d*IN,A=Math.PI*D*D/4*n,v=cd*Math.sqrt(2*P/RHO),q=A*v,f=RHO*q*v,gpm=q*M3S2GPM;
+  return{v:v,vf:v*MS2FTS,gpm:gpm,fn:f,lbf:f*N2LBF,hp:p*gpm/1714};}
+ var $=function(i){return document.getElementById(i)};
+ var DEF={p:'20000',d:'0.04',n:'1',c:'0.9'};
+ var rules={p:[1,100000,'Enter a pressure from 1 to 100,000 psi.'],d:[0.001,2,'Enter a diameter from 0.001 to 2 inches.'],n:[1,50,'Enter a whole number from 1 to 50.'],c:[0.5,1,'Enter a Cd from 0.5 to 1.0.']};
+ var f1=function(x){return x.toLocaleString('en-US',{maximumFractionDigits:1,minimumFractionDigits:1})};
+ var f0=function(x){return Math.round(x).toLocaleString('en-US')};
+ function read(){var out={},ok=true;
+  Object.keys(rules).forEach(function(k){var el=$(k),val=parseFloat(el.value.replace(/,/g,'')),r=rules[k];
+   var bad=!(val>=r[0]&&val<=r[1])||(k==='n'&&Math.floor(val)!==val);
+   el.setAttribute('aria-invalid',bad);$('e-'+k).textContent=bad?r[2]:'';if(bad)ok=false;out[k]=val;});
+  return ok?out:null;}
+ function render(){var x=read();if(!x)return;var r=jet(x.p,x.d,x.n,x.c);
+  $('r-v').textContent=f0(r.v);$('r-vf').textContent=f0(r.vf)+' ft/s';
+  $('r-q').textContent=r.gpm.toFixed(2);$('r-f').textContent=f1(r.lbf);$('r-fn').textContent=f1(r.fn)+' N';$('r-h').textContent=f1(r.hp);
+  var pts=[5000,10000,20000,30000,40000];if(pts.indexOf(x.p)<0){pts.push(x.p);pts.sort(function(a,b){return a-b});}
+  $('rows').innerHTML=pts.map(function(p){var t=jet(p,x.d,x.n,x.c);
+   return '<tr'+(p===x.p?' class="cur"':'')+'><td>'+p.toLocaleString('en-US')+'</td><td>'+f0(t.vf)+'</td><td>'+t.gpm.toFixed(2)+'</td><td>'+f1(t.lbf)+'</td><td>'+f1(t.hp)+'</td></tr>';}).join('');}
+ ['p','d','n','c'].forEach(function(k){$(k).addEventListener('input',render)});
+ $('reset').addEventListener('click',function(){Object.keys(DEF).forEach(function(k){$(k).value=DEF[k]});render();});
+ render();
+})();
+</script>
+
+</body></html>
